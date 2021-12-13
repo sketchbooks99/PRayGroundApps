@@ -285,7 +285,7 @@ static INLINE DEVICE float2 getBoxUV(const float3& p, const float3& min, const f
     int u_axis = (axis + 1) % 3;
     int v_axis = (axis + 2) % 3;
 
-    // axisÇ™YÇÃéûÇÕ (u: Z, v: X) -> (u: X, v: Z)Ç÷èáî‘ÇïœÇ¶ÇÈ
+    // axisÔøΩÔøΩYÔøΩÃéÔøΩÔøΩÔøΩ (u: Z, v: X) -> (u: X, v: Z)ÔøΩ÷èÔøΩÔøΩ‘ÇÔøΩœÇÔøΩÔøΩÔøΩ
     if (axis == 1) swap(u_axis, v_axis);
 
     uv.x = (getByIndex(p, u_axis) - getByIndex(min, u_axis)) / (getByIndex(max, u_axis) - getByIndex(min, u_axis));
@@ -490,8 +490,10 @@ extern "C" __device__ void __direct_callable__glass(SurfaceInteraction* si, void
 {
     const DielectricData* dielectric = reinterpret_cast<DielectricData*>(mat_data);
 
-    float ni = 1.0f; // air
-    float nt = dielectric->ior;  // ior specified 
+    const float absorb_coeff = dielectric->absorb_coeff;
+
+    float ni = 1.000292f; // air
+    float nt = dielectric->ior;  // ior specified
     float cosine = dot(si->wi, si->n);
     bool into = cosine < 0;
     float3 outward_normal = into ? si->n : -si->n;
@@ -507,12 +509,18 @@ extern "C" __device__ void __direct_callable__glass(SurfaceInteraction* si, void
 
     if (cannot_refract || reflect_prob > rnd(seed))
         si->wo = reflect(si->wi, outward_normal);
-    else    
+    else
         si->wo = refract(si->wi, outward_normal, cosine, ni, nt);
     si->radiance_evaled = false;
     si->trace_terminate = false;
     si->seed = seed;
-    si->albedo = optixDirectCall<float3, const float2&, void*>(dielectric->tex_program_id, si->uv, dielectric->tex_data);
+
+    // If into == false, ray is in the glass and will exit or be internally reflected at a surface. 
+    const bool calc_coeff = !into && absorb_coeff != 0.0f;
+    const float coeff = calc_coeff ? expf(-absorb_coeff * fmaxf(math::eps, si->t)) : 1.0f;
+    // Get material color using direct callable program
+    const float3 albedo = optixDirectCall<float3, const float2&, void*>(dielectric->tex_program_id, si->uv, dielectric->tex_data);
+    si->albedo = coeff * albedo;
 }
 
 extern "C" __device__ void __direct_callable__isotropic(SurfaceInteraction* si, void* mat_data)

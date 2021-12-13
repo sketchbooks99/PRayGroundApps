@@ -5,6 +5,11 @@
 
 #include "box_medium.h"
 
+// ImGui
+#include <prayground/ext/imgui/imgui.h>
+#include <prayground/ext/imgui/imgui_impl_glfw.h>
+#include <prayground/ext/imgui/imgui_impl_opengl3.h>
+
 using namespace std;
 
 using RaygenRecord = Record<RaygenData>;

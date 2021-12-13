@@ -31,8 +31,8 @@ void App::setup()
     params.frame = 0;
     initBuffer();
 
-    camera.setOrigin(0, 30, 40);
-    camera.setLookat(0, 0, 5);
+    camera.setOrigin(0, 25, 25 * 1.6667);
+    camera.setLookat(0, 0, 0);
     camera.setUp(0, 1, 0);
     camera.setFov(40.0f);
     camera.setAspect((float)params.width / params.height);
@@ -69,7 +69,7 @@ void App::setup()
     uint32_t isotropic_prg_id = setupCallable(DC_FUNC_STR("isotropic"), "");
     uint32_t area_prg_id = setupCallable(DC_FUNC_STR("area"), "");
 
-    textures.emplace("env", new ConstantTexture(make_float3(1.0f), constant_prg_id));
+    textures.emplace("env", new ConstantTexture(make_float3(0.25f), constant_prg_id));
 
     env = EnvironmentEmitter(textures.at("env"));
     env.copyToDevice();
@@ -155,6 +155,7 @@ void App::setup()
     };
 
     textures.emplace("red", new ConstantTexture(make_float3(0.8f, 0.05f, 0.05f), constant_prg_id));
+    textures.emplace("red2", new ConstantTexture(make_float3(0.9f, 0.5f, 0.4f), constant_prg_id));
     textures.emplace("green", new ConstantTexture(make_float3(0.05f, 0.8f, 0.05f), constant_prg_id));
     textures.emplace("white", new ConstantTexture(make_float3(1.0f), constant_prg_id));
     textures.emplace("wall", new ConstantTexture(make_float3(0.8f), constant_prg_id));
@@ -165,15 +166,16 @@ void App::setup()
     materials.emplace("red", new Diffuse(textures.at("red")));
     materials.emplace("green", new Diffuse(textures.at("green")));
     materials.emplace("glass", new Dielectric(textures.at("white"), 1.5f));
-    materials.emplace("blue_glass", new Dielectric(textures.at("red"), 1.5f));
+    materials.emplace("red_glass", new Dielectric(textures.at("red2"), 1.5f));
+    materials.emplace("red_glass_with_absorption", new Dielectric(textures.at("red2"), 1.5f, 0.1f));
     // Isotropic material for constant medium
     materials.emplace("iso_blue", new Isotropic(make_float3(0.8, 0.05f, 0.05f)));
 
     shapes.emplace("plane", new Plane(make_float2(-1.0f), make_float2(1.0f)));
 
-    constexpr float thick1 = 1.0f;
-    constexpr float thick2 = 2.0f;
-    constexpr float thick3 = 3.0f;
+    constexpr float thick1 = 0.1f;
+    constexpr float thick2 = 1.0f;
+    constexpr float thick3 = 5.0f;
     constexpr float density = 1.0f;
 
     shapes.emplace("box_medium1", new BoxMedium(make_float3(-3.0f, -5.0f, -thick1/2.0f), make_float3(3.0f, 5.0f, thick1/2.0f), density));
@@ -183,56 +185,85 @@ void App::setup()
     shapes.emplace("box2", new Box(make_float3(-3.0f, -5.0f, -thick2/2.0f), make_float3(3.0f, 5.0f, thick2/2.0f)));
     shapes.emplace("box3", new Box(make_float3(-3.0f, -5.0f, -thick3/2.0f), make_float3(3.0f, 5.0f, thick3/2.0f)));
 
+    lights.emplace("light", new AreaEmitter(textures.at("white"), 6.0f, true));
+
     Primitive floor{shapes.at("plane"), materials.at("wall"), diffuse_prg_id, diffuse_prg_id};
     setupPrimitive(plane_prg, floor, Matrix4f::translate(0, 0, 0) * Matrix4f::scale(100.0f));
 
+    constexpr float z_range = 7.5f;
+
     // Box1 (with medium)
-    {
-        Matrix4f objToWorld = Matrix4f::translate(-10.0f, 5.0f, 15.0f) * Matrix4f::rotate(math::pi / 12, {0.0f, 1.0f, 0.0f});
-        Primitive boundary{shapes.at("box1"), materials.at("glass"), glass_prg_id, glass_prg_id};
-        Primitive medium{shapes.at("box_medium1"), materials.at("iso_blue"), isotropic_prg_id, isotropic_prg_id};
-        setupPrimitive(box_prg, boundary, objToWorld);
-        setupPrimitive(box_medium_prg, medium, objToWorld);
-    }
+    //{
+    //    Matrix4f objToWorld = Matrix4f::translate(-10.0f, 5.0f, 0.0f) * Matrix4f::rotate(math::pi / 12, {0.0f, 1.0f, 0.0f});
+    //    Primitive boundary{shapes.at("box1"), materials.at("glass"), glass_prg_id, glass_prg_id};
+    //    Primitive medium{shapes.at("box_medium1"), materials.at("iso_blue"), isotropic_prg_id, isotropic_prg_id};
+    //    setupPrimitive(box_prg, boundary, objToWorld);
+    //    setupPrimitive(box_medium_prg, medium, objToWorld);
+    //}
 
     // Box1 (without medium)
     {
-        Matrix4f objToWorld = Matrix4f::translate(-10.0f, 5.0f, -5.0f) * Matrix4f::rotate(math::pi / 12, {0.0f, 1.0f, 0.0f});
-        Primitive boundary{shapes.at("box1"), materials.at("blue_glass"), glass_prg_id, glass_prg_id};
+        Matrix4f objToWorld = Matrix4f::translate(-10.0f, 5.0f, -z_range) * Matrix4f::rotate(math::pi / 12, {0.0f, 1.0f, 0.0f});
+        Primitive boundary{shapes.at("box1"), materials.at("red_glass"), glass_prg_id, glass_prg_id};
+        setupPrimitive(box_prg, boundary, objToWorld);
+    }
+
+    // Box1 (without medium and with absorption)
+    {
+        Matrix4f objToWorld = Matrix4f::translate(-10.0f, 5.0f, z_range) * Matrix4f::rotate(math::pi / 12, { 0.0f, 1.0f, 0.0f });
+        Primitive boundary{ shapes.at("box1"), materials.at("red_glass_with_absorption"), glass_prg_id, glass_prg_id };
         setupPrimitive(box_prg, boundary, objToWorld);
     }
 
     // Box2 (with medium)
-    {
-        Matrix4f objToWorld = Matrix4f::translate(0.0f, 5.0f, 15.0f) * Matrix4f::rotate(math::pi / 12, {0.0f, 1.0f, 0.0f});
-        Primitive boundary{shapes.at("box2"), materials.at("glass"), glass_prg_id, glass_prg_id};
-        Primitive medium{shapes.at("box_medium2"), materials.at("iso_blue"), isotropic_prg_id, isotropic_prg_id};
-        setupPrimitive(box_prg, boundary, objToWorld);
-        setupPrimitive(box_medium_prg, medium, objToWorld);
-    }
+    //{
+    //    Matrix4f objToWorld = Matrix4f::translate(0.0f, 5.0f, 0.0f) * Matrix4f::rotate(math::pi / 12, {0.0f, 1.0f, 0.0f});
+    //    Primitive boundary{shapes.at("box2"), materials.at("glass"), glass_prg_id, glass_prg_id};
+    //    Primitive medium{shapes.at("box_medium2"), materials.at("iso_blue"), isotropic_prg_id, isotropic_prg_id};
+    //    setupPrimitive(box_prg, boundary, objToWorld);
+    //    setupPrimitive(box_medium_prg, medium, objToWorld);
+    //}
 
     // Box2 (without medium)
     {
-        Matrix4f objToWorld = Matrix4f::translate(0.0f, 5.0f, -5.0f) * Matrix4f::rotate(math::pi / 12, {0.0f, 1.0f, 0.0f});
-        Primitive boundary{shapes.at("box2"), materials.at("blue_glass"), glass_prg_id, glass_prg_id };
+        Matrix4f objToWorld = Matrix4f::translate(0.0f, 5.0f, -z_range) * Matrix4f::rotate(math::pi / 12, {0.0f, 1.0f, 0.0f});
+        Primitive boundary{shapes.at("box2"), materials.at("red_glass"), glass_prg_id, glass_prg_id };
+        setupPrimitive(box_prg, boundary, objToWorld);
+    }
+
+    // Box2 (without medium and with absorption)
+    {
+        Matrix4f objToWorld = Matrix4f::translate(0.0f, 5.0f, z_range) * Matrix4f::rotate(math::pi / 12, { 0.0f, 1.0f, 0.0f });
+        Primitive boundary{ shapes.at("box2"), materials.at("red_glass_with_absorption"), glass_prg_id, glass_prg_id };
         setupPrimitive(box_prg, boundary, objToWorld);
     }
 
     // Box3 (with medium)
-    {
-        Matrix4f objToWorld = Matrix4f::translate(10.0f, 5.0f, 15.0f) * Matrix4f::rotate(math::pi / 12, {0.0f, 1.0f, 0.0f});
-        Primitive boundary{shapes.at("box3"), materials.at("glass"), glass_prg_id, glass_prg_id};
-        Primitive medium{shapes.at("box_medium3"), materials.at("iso_blue"), isotropic_prg_id, isotropic_prg_id};
-        setupPrimitive(box_prg, boundary, objToWorld);
-        setupPrimitive(box_medium_prg, medium, objToWorld);
-    }
+    //{
+    //    Matrix4f objToWorld = Matrix4f::translate(10.0f, 5.0f, 0.0f) * Matrix4f::rotate(math::pi / 12, {0.0f, 1.0f, 0.0f});
+    //    Primitive boundary{shapes.at("box3"), materials.at("glass"), glass_prg_id, glass_prg_id};
+    //    Primitive medium{shapes.at("box_medium3"), materials.at("iso_blue"), isotropic_prg_id, isotropic_prg_id};
+    //    setupPrimitive(box_prg, boundary, objToWorld);
+    //    setupPrimitive(box_medium_prg, medium, objToWorld);
+    //}
 
     // Box3 (without medium)
     {
-        Matrix4f objToWorld = Matrix4f::translate(10.0f, 5.0f, -5.0f) * Matrix4f::rotate(math::pi / 12, {0.0f, 1.0f, 0.0f});
-        Primitive boundary{shapes.at("box3"), materials.at("blue_glass"), glass_prg_id, glass_prg_id};
+        Matrix4f objToWorld = Matrix4f::translate(10.0f, 5.0f, -z_range) * Matrix4f::rotate(math::pi / 12, {0.0f, 1.0f, 0.0f});
+        Primitive boundary{shapes.at("box3"), materials.at("red_glass"), glass_prg_id, glass_prg_id};
         setupPrimitive(box_prg, boundary, objToWorld);
     }
+
+    // Box3 (without medium and with absorption)
+    {
+        Matrix4f objToWorld = Matrix4f::translate(10.0f, 5.0f, z_range) * Matrix4f::rotate(math::pi / 12, { 0.0f, 1.0f, 0.0f });
+        Primitive boundary{ shapes.at("box3"), materials.at("red_glass_with_absorption"), glass_prg_id, glass_prg_id };
+        setupPrimitive(box_prg, boundary, objToWorld);
+    }
+
+    setupAreaEmitter(plane_prg, shapes.at("plane"), lights.at("light"), Matrix4f::translate(0.0f, 25.0f, -30.0f) * Matrix4f::rotate(-math::pi / 3, { 1,0,0 })* Matrix4f::scale(10));
+    setupAreaEmitter(plane_prg, shapes.at("plane"), lights.at("light"), Matrix4f::translate(-25.0f, 25.0f, 0.0f) * Matrix4f::rotate(math::pi / 3, { 0,0,1 })* Matrix4f::scale(10));
+    setupAreaEmitter(plane_prg, shapes.at("plane"), lights.at("light"), Matrix4f::translate(25.0f, 25.0f, 0.0f) * Matrix4f::rotate(-math::pi / 3, { 0,0,1 })* Matrix4f::scale(10));
 
     CUDA_CHECK(cudaStreamCreate(&stream));
     ias.build(context, stream);
@@ -240,6 +271,16 @@ void App::setup()
     params.handle = ias.handle();
     pipeline.create(context);
     d_params.allocate(sizeof(LaunchParams));
+
+    // GUI setting
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+
+    const char* glsl_version = "#version 150";
+    ImGui::StyleColorsDark();
+    ImGui_ImplGlfw_InitForOpenGL(pgGetCurrentWindow()->windowPtr(), true);
+    ImGui_ImplOpenGL3_Init(glsl_version);
 }
 
 // ------------------------------------------------------------------
@@ -270,12 +311,42 @@ void App::update()
 // ------------------------------------------------------------------
 void App::draw()
 {
-    pgSetWindowName(toString(params.frame));
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    ImGui::Begin("GUI");
+
+    ImGui::Text("Camera info:");
+    ImGui::Text("Origin: %f %f %f", camera.origin().x, camera.origin().y, camera.origin().z);
+    ImGui::Text("Lookat: %f %f %f", camera.lookat().x, camera.lookat().y, camera.lookat().z);
+    ImGui::Text("Up: %f %f %f", camera.up().x, camera.up().y, camera.up().z);
+
+    Dielectric* with_absorption = static_cast<Dielectric*>(materials.at("red_glass_with_absorption").get());
+    float absorb_coeff = with_absorption->absorbCoeff();
+    ImGui::SliderFloat("Absorption coefficient", &absorb_coeff, 0.001f, 1.0f);
+    if (absorb_coeff != with_absorption->absorbCoeff())
+    {
+        with_absorption->setAbsorbCoeff(absorb_coeff);
+        with_absorption->copyToDevice();
+        camera_update = true;
+    }
+
+    ImGui::Text("Frame rate: %.3f ms/frame (%.2f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+    ImGui::Text("Render time: %.3f ms/frame", render_time * 1000.0f);
+    ImGui::Text("Frame: %d", params.frame);
+
+    ImGui::End();
+
+    ImGui::Render();
+
     result.draw(0, 0);
     if (params.frame == 5000) {
-        result.write(pgPathJoin(pgAppDir(), "glass.jpg"));
+        result.write(pgPathJoin(pgAppDir(), "glass (C = " + to_string(absorb_coeff) + ").jpg"));
         pgExit();
     }
+
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
 // ------------------------------------------------------------------
